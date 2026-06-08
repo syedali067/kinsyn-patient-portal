@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+    <path
+        stroke="currentColor"
+        stroke-linejoin="round"
+        stroke-width="1.25"
+        d="M16.608 7.738A6.854 6.854 0 0 0 12 6c-2.226 0-3.76.985-4.608 1.738a1.154 1.154 0 0 0-.106 1.626l1.155 1.327a.922.922 0 0 0 1.165.176c.552-.333 1.418-.732 2.395-.732.977 0 1.843.4 2.395.732a.922.922 0 0 0 1.164-.176l1.154-1.326a1.154 1.154 0 0 0-.106-1.627Z"
+    />
+    <rect
+        width="18"
+        height="18"
+        x="3"
+        y="3"
+        stroke="currentColor"
+        stroke-linejoin="round"
+        stroke-width="1.25"
+        rx="3"
+    />
+</svg>

@@ -1,0 +1,334 @@
+name: Production + Replica Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: patportal-production
+  cancel-in-progress: false # Ensure Terraform completes itself.
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  SERVICE_NAME: patient-portal
+  ECR_REPOSITORY_PROD: production/patient-portal
+  ECR_REPOSITORY_REPLICA: development/patient-portal
+  IMAGE_TAG: build-${{ github.run_number }}
+  UAT_DISTRIBUTION_ID: ${{ vars.KINSYN_UAT_CLOUDFRONT_DISTRIBUTION_ID }}
+  PROD_DISTRIBUTION_ID: ${{ vars.KINSYN_PROD_CLOUDFRONT_DISTRIBUTION_ID }}
+
+jobs:
+  validate-replica-terraform:
+    name: Validate Replica Terraform
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate Terraform
+        uses: dflook/terraform-validate@v1
+        with:
+          path: terraform/replica
+
+  validate-production-terraform:
+    name: Validate Production Terraform
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate Terraform
+        uses: dflook/terraform-validate@v1
+        with:
+          path: terraform/production
+
+  build-replica:
+    name: Build Replica
+    runs-on: ubuntu-latest
+    needs: validate-replica-terraform
+    outputs:
+      image: ${{ steps.export-image.outputs.uri }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Create .env file
+        run: touch .env
+
+      - name: Configure AWS credentials (Kinsyn)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.KINSYN_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.KINSYN_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fetch secret from AWS Secrets Manager and create .env
+        run: |
+          aws secretsmanager get-secret-value \
+          --secret-id development/patient-portal \
+          --query SecretString \
+          --output text > temp_secret.json
+
+          # Convert JSON to .env format and save to .env file
+          jq -r 'to_entries | .[] | "\(.key)=\(.value)"' temp_secret.json >> .env
+
+          # Clean up temporary JSON file
+          rm temp_secret.json
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker Build and Push
+        uses: docker/build-push-action@v6
+        with:
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+          context: .
+          provenance: false
+          sbom: false
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_REPLICA }}:${{ env.IMAGE_TAG }}
+
+      - id: export-image
+        name: Export image URI for Terraform
+        run: |
+          echo "uri=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_REPLICA }}:${{ env.IMAGE_TAG }}" >> "$GITHUB_OUTPUT"
+
+  build-production:
+    name: Build Production
+    runs-on: ubuntu-latest
+    needs: validate-production-terraform
+    outputs:
+      image: ${{ steps.export-image.outputs.uri }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Create .env file
+        run: touch .env
+
+      - name: Configure AWS credentials (Kinsyn)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.KINSYN_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.KINSYN_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fetch secret from AWS Secrets Manager and create .env
+        run: |
+          aws secretsmanager get-secret-value \
+          --secret-id production/patient-portal \
+          --query SecretString \
+          --output text > temp_secret.json
+
+          # Convert JSON to .env format and save to .env file
+          jq -r 'to_entries | .[] | "\(.key)=\(.value)"' temp_secret.json >> .env
+
+          # Clean up temporary JSON file
+          rm temp_secret.json
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker Build and Push
+        uses: docker/build-push-action@v6
+        with:
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+          context: .
+          provenance: false
+          sbom: false
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_PROD }}:${{ env.IMAGE_TAG }}
+
+      - id: export-image
+        name: Export image URI for Terraform
+        run: |
+          echo "uri=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_PROD }}:${{ env.IMAGE_TAG }}" >> "$GITHUB_OUTPUT"
+
+  deploy-replica:
+    name: Deploy Replica
+    needs: build-replica
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configure AWS credentials (Kinsyn)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.KINSYN_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.KINSYN_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform apply
+        uses: dflook/terraform-apply@v1
+        with:
+          path: terraform/replica
+          auto_approve: true
+          backend_config: |
+            region=${{ env.AWS_REGION }}
+          variables: |
+            docker_image="${{ needs.build-replica.outputs.image }}"
+
+  deploy-production:
+    name: Deploy Production
+    needs: build-production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configure AWS credentials (Kinsyn)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.KINSYN_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.KINSYN_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform apply
+        uses: dflook/terraform-apply@v1
+        with:
+          path: terraform/production
+          auto_approve: true
+          variables: |
+            docker_image="${{ needs.build-production.outputs.image }}"
+
+  cache-clear-replica:
+    name: Bust CloudFront Cache
+    runs-on: ubuntu-latest
+    needs: deploy-replica
+    steps:
+      - name: Configure AWS credentials (Kinsyn)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.KINSYN_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.KINSYN_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Invalidate CloudFront /portal/*
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ env.UAT_DISTRIBUTION_ID }}" \
+            --paths "/portal" "/portal/*"
+
+  cache-clear-production:
+    name: Bust CloudFront Cache
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    steps:
+      - name: Configure AWS credentials (Kinsyn)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.KINSYN_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.KINSYN_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Invalidate CloudFront /portal/*
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ env.PROD_DISTRIBUTION_ID }}" \
+            --paths "/portal" "/portal/*"
+
+  finalize:
+    name: Finalize
+    runs-on: ubuntu-latest
+    if: always() && !cancelled()
+    needs:
+      - validate-production-terraform
+      - build-production
+      - deploy-production
+      - cache-clear-production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Bump version and push tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create a GitHub release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.tag_version.outputs.new_tag }}
+          name: Build ${{github.run_number}}
+          body: ${{ steps.tag_version.outputs.changelog }}
+
+      - name: Create Sentry release
+        uses: getsentry/action-release@v3
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: jrnys-wellness
+          SENTRY_PROJECT: patient-portal-kinsyn
+        with:
+          environment: production
+
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "text": "Patient Portal Build • PRODUCTION",
+              "blocks": [
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Application:*\n :rocket:Patient Portal • PRODUCTION:rocket: \n"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Actor:*\n${{ github.actor }}\n"
+                    }
+                  ]
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "${{ needs.validate-production-terraform.result == 'chris-success' && ':success:' || needs.validate-production-terraform.result == 'skipped' && ':skipping:' || needs.validate-production-terraform.result == 'cancelled' && ':chris-cancelled:' || ':chris-failure:' }} IaC Validation"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "${{ needs.build-production.result == 'success' && ':chris-success:' || needs.build-production.result == 'skipped' && ':skipping:' || needs.build-production.result == 'cancelled' && ':chris-cancelled:' || ':chris-failure:' }} Build"
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "${{ needs.deploy-production.result == 'success' && ':chris-success:' || needs.deploy-production.result == 'skipped' && ':skipping:' || needs.deploy-production.result == 'cancelled' && ':chris-cancelled:' || ':chris-failure:' }} Deploy"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "${{ needs.cache-clear-production.result == 'success' && ':chris-success:' || needs.cache-clear-production.result == 'skipped' && ':skipping:' || needs.cache-clear-production.result == 'cancelled' && ':chris-cancelled:' || ':chris-failure:' }} CDN Cache Purge"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ vars.SLACK_DEPLOYMENTS_WEBHOOK }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+    <rect
+        width="18.341"
+        height="6.986"
+        x="3.045"
+        y="16.765"
+        stroke="currentColor"
+        stroke-width="1.125"
+        rx="3.493"
+        transform="rotate(-45 3.045 16.765)"
+    />
+    <path stroke="currentColor" stroke-width="1.125" d="m9.817 10.345 4.588 4.588" />
+</svg>

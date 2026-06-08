@@ -1,0 +1,22 @@
+@import 'tailwindcss';
+@import 'animate.css';
+
+@import './fonts.css';
+@import './theme';
+@import './utilities';
+
+@plugin "@tailwindcss/typography";
+
+body {
+  @apply text-coal font-primary text-16 relative min-h-dvh min-w-[360px] overflow-x-hidden overflow-y-scroll scroll-smooth;
+}
+
+button:not(:disabled) {
+  @apply cursor-pointer;
+}
+
+.prose {
+  --tw-prose-bullets: inherit;
+  --tw-prose-counters: inherit;
+  max-width: 100% !important;
+}

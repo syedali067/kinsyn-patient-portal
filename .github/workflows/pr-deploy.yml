@@ -1,0 +1,291 @@
+name: Feature Deploy
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+concurrency:
+  group: patportal-pr-${{ github.event.number }} # Moved concurrency block to the correct level
+  cancel-in-progress: false # Ensure Terraform completes itself.
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  SERVICE_NAME: patient-pr-${{ github.event.number }}
+  PR_DOMAIN: ${{ vars.KINSYN_PREVIEW_DOMAIN || 'kinsyn.dev' }}
+  ECR_REPOSITORY: ${{ vars.KINSYN_PATPORTAL_ECR_REPOSITORY }}
+  IMAGE_TAG: pr-${{ github.event.number }}-${{ github.run_number }}
+  ALB_DNS: ${{ vars.KINSYN_UAT_ALB_DNS }}
+
+jobs:
+  dns:
+    name: Create Dynamic Subdomain
+    if: github.actor != 'dependabot[bot]' && (github.event.action == 'opened' || github.event.action == 'reopened')
+    runs-on: ubuntu-latest
+    outputs:
+      record_exists: ${{ steps.check-record.outputs.record_exists }}
+    steps:
+      - name: Check if Cloudflare record does not exist
+        id: check-record
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CLOUDFLARE_KINSYN_DEV_ZONE }}
+          RECORD_NAME: ${{ env.SERVICE_NAME }}.${{ env.PR_DOMAIN }}
+          RECORD_TYPE: 'CNAME'
+        run: |
+          RESPONSE=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?name=${RECORD_NAME}&type=${RECORD_TYPE}" \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            -H "Content-Type: application/json")
+
+          echo "API Response: $RESPONSE"
+
+          if echo "$RESPONSE" | grep -q '"count":0'; then
+            echo "✓ Success: DNS record '$RECORD_NAME' does not exist"
+            echo "record_exists=false" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "✗ Warning: DNS record '$RECORD_NAME' already exists"
+            echo "Full response: $RESPONSE"
+            echo "record_exists=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+      - name: Create Cloudflare DNS Record
+        if: steps.check-record.outputs.record_exists == 'false'
+        uses: rez0n/create-dns-record@v2.2
+        with:
+          type: 'CNAME'
+          name: '${{ env.SERVICE_NAME }}.${{ env.PR_DOMAIN }}'
+          content: '${{ env.ALB_DNS }}'
+          ttl: 1
+          proxied: true
+          token: ${{ secrets.CLOUDFLARE_TOKEN }}
+          zone: ${{ secrets.CLOUDFLARE_KINSYN_DEV_ZONE }}
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint:only
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    outputs:
+      image: ${{ steps.export-image.outputs.uri }}
+      listener_priority: ${{ steps.priority.outputs.value }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Create .env file
+        run: touch .env
+
+      - name: Configure AWS credentials (Kinsyn)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.KINSYN_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.KINSYN_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fetch secret from AWS Secrets Manager and create .env
+        run: |
+          aws secretsmanager get-secret-value \
+          --secret-id development/patient-portal \
+          --query SecretString \
+          --output text > temp_secret.json
+
+          # Convert JSON to .env format and save to .env file
+          jq -r 'to_entries | .[] | "\(.key)=\(.value)"' temp_secret.json >> .env
+
+          # Clean up temporary JSON file
+          rm temp_secret.json
+
+      - name: Append .env.preview vars to .env
+        run: cat .env.preview >> .env
+
+      - name: Verify .env file creation (Optional for debugging)
+        run: cat .env
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker Build and Push
+        uses: docker/build-push-action@v6
+        with:
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+          context: .
+          provenance: false
+          sbom: false
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:pr-${{ github.event.number }}-build-${{ github.run_number }}
+
+      - id: export-image
+        name: Export image URI for Terraform
+        run: |
+          echo "uri=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:pr-${{ github.event.number }}-build-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - id: priority
+        name: Listener rule priority
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+        run: echo "value=$((10000 + PR_NUMBER))" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy Terraform Preview Stack
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (Kinsyn)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.KINSYN_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.KINSYN_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform apply
+        uses: dflook/terraform-apply@v1
+        with:
+          path: terraform/preview
+          auto_approve: true
+          backend_config: |
+            key=infrastructure-uat/preview/${{ env.SERVICE_NAME }}.tfstate
+            region=${{ env.AWS_REGION }}
+          variables: |
+            service_name="${{ env.SERVICE_NAME }}"
+            docker_image="${{ needs.build.outputs.image }}"
+
+  finalize:
+    name: Finalize
+    runs-on: ubuntu-latest
+    permissions: write-all
+    if: always()
+    needs:
+      - dns
+      - lint
+      - build
+      - deploy
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: PR Comment
+        if: github.event.action == 'opened' && github.actor != 'dependabot[bot]'
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          message: |
+            PR-${{ github.event.number }} Preview is Ready. URL: https://${{ env.SERVICE_NAME }}.${{ env.PR_DOMAIN }}
+
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "text": "Patient Portal Build • PR #${{ github.event.number }} • ${{ (needs.dns.result == 'cancelled' || needs.lint.result == 'cancelled' || needs.build.result == 'cancelled' || needs.deploy.result == 'cancelled') && 'CANCELLED' || needs.dns.result == 'success' && needs.lint.result == 'success' && needs.build.result == 'success' && needs.deploy.result == 'success' && 'SUCCESS' || 'FAILED' }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Application:*\n Patient Portal • PR #${{ github.event.number }}\n"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Actor:*\n${{ github.actor }}\n"
+                    }
+                  ]
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "${{ needs.dns.result == 'success' && ':chris-success:' || needs.dns.result == 'skipped' && ':skipping:' || needs.dns.result == 'cancelled' && ':chris-cancelled:' || ':chris-failure:' }} DNS"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "${{ needs.lint.result == 'success' && ':chris-success:' || needs.lint.result == 'skipped' && ':skipping:' || needs.lint.result == 'cancelled' && ':chris-cancelled:' || ':chris-failure:' }} Lint"
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "${{ needs.build.result == 'success' && ':chris-success:' || needs.build.result == 'skipped' && ':skipping:' || needs.build.result == 'cancelled' && ':chris-cancelled:' || ':chris-failure:' }} Build"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "${{ needs.deploy.result == 'success' && ':chris-success:' || needs.deploy.result == 'skipped' && ':skipping:' || needs.deploy.result == 'cancelled' && ':chris-cancelled:' || ':chris-failure:' }} Deploy"
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "\n*Preview URL:*\nhttps://${{ env.SERVICE_NAME }}.${{ env.PR_DOMAIN }}"
+                  }
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "Open PR"
+                      },
+                      "url": "${{ github.event.pull_request.html_url }}"
+                    },
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "Open Workflow Run"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ vars.SLACK_DEPLOYMENTS_DEV_WEBHOOK }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

@@ -1,0 +1,111 @@
+@reference './main.css';
+
+.introjs-overlay {
+  @apply z-1000;
+}
+
+.introjs-tooltipReferenceLayer,
+.introjs-helperLayer {
+  @apply fixed z-1000 transition-all;
+}
+
+.introjs-helperLayer {
+  @apply rounded-8 shadow-[0_0_0_5000px_rgba(29,31,33,0.5)]! transition-all;
+}
+
+.introjs-tooltip {
+  @apply rounded-8 absolute ml-6! flex w-300 flex-col gap-24 bg-white p-24 shadow-xl transition-all;
+}
+
+/* IntroJs Arrows */
+.introjs-arrow {
+  @apply absolute border-8 border-transparent content-none;
+}
+.introjs-arrow.left {
+  @apply top-10 -left-16 border-r-white;
+}
+.introjs-arrow.right {
+  @apply top-10 -right-16 border-l-white;
+}
+.introjs-arrow.top-middle {
+  @apply -top-16 left-1/2 -translate-x-1/2 border-b-white;
+}
+.introjs-arrow.bottom {
+  @apply -bottom-16 left-10 border-t-white;
+}
+
+.introjs-tooltiptext {
+  @apply flex flex-col p-0;
+}
+
+.introjs-tooltip-header {
+  @apply hidden;
+}
+
+.introjs-bullets {
+  @apply order-last p-0;
+}
+.introjs-bullets ul {
+  @apply flex items-center justify-center gap-4;
+}
+.introjs-bullets ul li {
+  @apply m-0;
+}
+.introjs-bullets ul li a {
+  @apply bg-coal/10 block size-8 cursor-pointer rounded-full transition-colors;
+}
+.introjs-bullets ul li a.active {
+  @apply bg-coal;
+}
+.introjs-bullets ul li a:hover {
+  @apply bg-coal/20;
+}
+
+.custom-tooltip-image-container {
+  @apply rounded-8 mb-24 h-120 w-full overflow-hidden;
+}
+
+.custom-tooltip-image {
+  @apply pointer-events-none size-full object-cover object-center;
+}
+
+.custom-tooltip-title {
+  @apply text-21 font-secondary text-coal mb-8;
+}
+
+.custom-tooltip-text {
+  @apply text-14 text-secondary-text;
+}
+
+/* Buttons */
+.introjs-tooltipbuttons {
+  @apply flex items-center gap-8;
+}
+
+.introjs-button {
+  @apply text-12 rounded-4 grow cursor-pointer border-1 border-transparent p-16 text-center uppercase transition-colors outline-none;
+}
+.introjs-nextbutton {
+  @apply bg-coal text-white;
+}
+.introjs-nextbutton:hover {
+  @apply bg-stone;
+}
+.introjs-nextbutton:disabled {
+  @apply bg-disabled-bg text-disabled-text cursor-not-allowed;
+}
+
+.introjs-skipbutton {
+  @apply text-coal border-stone bg-transparent;
+}
+.introjs-skipbutton:hover {
+  @apply border-coal;
+}
+
+.introjs-prevbutton {
+  @apply hidden;
+}
+
+.app-no-scroll {
+  @apply fixed w-full overflow-y-scroll;
+}

@@ -1,0 +1,49 @@
+@theme {
+  --text-96: 6rem;
+  --text-96--line-height: 1;
+  --text-96--letter-spacing: -0.02em;
+
+  --text-64: 4rem;
+  --text-64--line-height: 1.1;
+  --text-64--letter-spacing: -0.01em;
+
+  --text-48: 3rem;
+  --text-48--line-height: 1;
+  --text-48--letter-spacing: -0.02em;
+
+  --text-40: 2.5rem;
+  --text-40--line-height: 1.1;
+  --text-40--letter-spacing: -0.01em;
+
+  --text-32: 2rem;
+  --text-32--line-height: 1.25;
+  --text-32--letter-spacing: -0.01em;
+
+  --text-26: 1.625rem;
+  --text-26--line-height: 1.25;
+
+  --text-24: 1.5rem;
+  --text-24--line-height: 1.25;
+
+  --text-21: 1.3125rem;
+  --text-21--line-height: 1.25;
+
+  --text-18: 1.125rem;
+  --text-18--line-height: 1.25;
+
+  --text-16: 1rem;
+  --text-16--line-height: 1.25;
+
+  --text-14: 0.875rem;
+  --text-14--line-height: 1.25;
+
+  --text-12: 0.75rem;
+  --text-12--line-height: 1.25;
+
+  --text-10: 0.625rem;
+  --text-10--line-height: 1.25;
+
+  --font-primary: 'Neue Haas Grotesk Text', sans-serif;
+  --font-secondary: 'Neue Haas Grotesk Display', sans-serif;
+  --font-serif: 'Reckless', serif;
+}

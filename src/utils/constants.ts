@@ -1,0 +1,4 @@
+export const CHAT_REFRESH_INTERVAL = 30000;
+export const DEBOUNCE_DELAY = 600;
+export const ANIMATION_DELAY = 200;
+export const PAGE_TRANSITION_DURATION = 400;

@@ -1,0 +1,77 @@
+user nginx;
+
+worker_processes auto;
+
+error_log /var/log/nginx/error.log warn;
+
+pid /var/run/nginx.pid;
+
+events {
+	worker_connections 1024;
+}
+
+http {
+	include /etc/nginx/mime.types;
+	default_type application/octet-stream;
+
+  	log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+		'$status $body_bytes_sent "$http_referer" '
+		'"$http_user_agent" "$http_x_forwarded_for"';
+
+	access_log  /var/log/nginx/access.log  main;
+
+	sendfile        on;
+	#tcp_nopush     on;
+	server_names_hash_bucket_size 128;
+
+	keepalive_timeout  65;
+
+	gzip  on;
+
+	server {
+		listen      3001;
+		server_name  _;
+
+		# Match Vite dev proxy: /api/v3 → Symfony, other /api/* and /actions/* → Craft
+		location ^~ /api/v3 {
+			proxy_pass ${SYMFONY_API_ORIGIN};
+			proxy_http_version 1.1;
+			proxy_ssl_server_name on;
+			proxy_set_header Host $proxy_host;
+			proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+			proxy_set_header X-Forwarded-Proto $scheme;
+			proxy_set_header X-Requested-With $http_x_requested_with;
+			proxy_set_header Cookie $http_cookie;
+		}
+
+		location ~ ^/(api|actions)/ {
+			proxy_pass ${CRAFT_API_ORIGIN};
+			proxy_http_version 1.1;
+			proxy_ssl_server_name on;
+			proxy_set_header Host $proxy_host;
+			proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+			proxy_set_header X-Forwarded-Proto $scheme;
+			proxy_set_header X-Requested-With $http_x_requested_with;
+			proxy_set_header Cookie $http_cookie;
+		}
+
+		# Vite is built with base=/portal, but dist files are stored at /usr/share/nginx/html/*
+		# (not /usr/share/nginx/html/portal/*). Strip the /portal prefix before filesystem lookup.
+		location ^~ /portal {
+			rewrite ^/portal/?(.*)$ /$1 break;
+			root   /usr/share/nginx/html;
+			index  index.html index.htm;
+			try_files $uri $uri/ /index.html;
+		}
+
+		location / {
+			root   /usr/share/nginx/html;
+			index  index.html index.htm;
+			try_files $uri $uri/ /index.html;
+		}
+
+		location ~ ^/$ {
+			rewrite  ^.*$  /index.html  last;
+		}
+  	}
+}

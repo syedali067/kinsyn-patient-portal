@@ -1,0 +1,22 @@
+services:
+  app:
+    container_name: patient-portal
+    build:
+      context: .
+      dockerfile: Dockerfile.development
+    working_dir: /app
+    command: sh -c 'npm ci && npm run dev'
+    ports:
+      - '${APP_PORT:-5173}:5173'
+    volumes:
+      - .:/app
+
+  storybook:
+    container_name: storybook
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c 'npm ci && npm run storybook'
+    ports:
+      - '${STORYBOOK_PORT:-6006}:6006'
+    volumes:
+      - .:/app

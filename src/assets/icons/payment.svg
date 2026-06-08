@@ -1,0 +1,33 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+        d="M2 9L22 9"
+        stroke="currentColor"
+        stroke-width="1.25"
+        stroke-linecap="square"
+        stroke-linejoin="round"
+    />
+    <path
+        d="M4 15L7 15"
+        stroke="currentColor"
+        stroke-width="1.25"
+        stroke-linecap="square"
+        stroke-linejoin="round"
+    />
+    <path
+        d="M9 15L12 15"
+        stroke="currentColor"
+        stroke-width="1.25"
+        stroke-linecap="square"
+        stroke-linejoin="round"
+    />
+    <mask id="path-4-inside-1_2002_139" fill="white">
+        <path
+            d="M1 6C1 4.89543 1.89543 4 3 4H21C22.1046 4 23 4.89543 23 6V18C23 19.1046 22.1046 20 21 20H3C1.89543 20 1 19.1046 1 18V6Z"
+        />
+    </mask>
+    <path
+        d="M3 5.25H21V2.75H3V5.25ZM21.75 6V18H24.25V6H21.75ZM21 18.75H3V21.25H21V18.75ZM2.25 18V6H-0.25V18H2.25ZM3 18.75C2.58579 18.75 2.25 18.4142 2.25 18H-0.25C-0.25 19.7949 1.20507 21.25 3 21.25V18.75ZM21.75 18C21.75 18.4142 21.4142 18.75 21 18.75V21.25C22.7949 21.25 24.25 19.7949 24.25 18H21.75ZM21 5.25C21.4142 5.25 21.75 5.58579 21.75 6H24.25C24.25 4.20508 22.7949 2.75 21 2.75V5.25ZM3 2.75C1.20507 2.75 -0.25 4.20507 -0.25 6H2.25C2.25 5.58579 2.58579 5.25 3 5.25V2.75Z"
+        fill="currentColor"
+        mask="url(#path-4-inside-1_2002_139)"
+    />
+</svg>

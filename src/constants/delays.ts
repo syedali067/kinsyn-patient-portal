@@ -1,0 +1,2 @@
+export const REQUEST_DEBOUNCE_FREQUENCY = 800;
+export const THROTTLE_DELAY = 200;

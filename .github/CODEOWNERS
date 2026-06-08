@@ -1,0 +1,3 @@
+# Require review from brucewyne for infra and workflow changes.
+/terraform/ @brucewyne
+/.github/ @brucewyne

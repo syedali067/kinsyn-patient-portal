@@ -1,0 +1,68 @@
+name: Feature Teardown
+
+on:
+  pull_request:
+    types:
+      - closed
+      - unlabeled
+
+concurrency:
+  group: patportal-pr-${{ github.event.number }}
+  cancel-in-progress: false # Ensure Terraform completes itself.
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  SERVICE_NAME: patient-pr-${{ github.event.number }}
+  PR_DOMAIN: ${{ vars.KINSYN_PREVIEW_DOMAIN || 'kinsyn.dev' }}
+  ECR_REPOSITORY: ${{ vars.KINSYN_PATPORTAL_ECR_REPOSITORY }}
+  IMAGE_TAG: pr-${{ github.event.number }}-${{ github.run_number }}
+  ALB_DNS: ${{ vars.KINSYN_UAT_ALB_DNS }}
+
+jobs:
+  dns:
+    name: Manage DNS
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - name: Remove CNAME from CloudFlare
+        uses: infraway/delete-dns-record@v2.1
+        with:
+          name: ${{ env.SERVICE_NAME }}.${{ env.PR_DOMAIN }}
+          token: ${{ secrets.CLOUDFLARE_TOKEN }}
+          zone: ${{ secrets.CLOUDFLARE_KINSYN_DEV_ZONE }}
+
+  destroy:
+    name: AWS Teardown
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - name: Configure AWS credentials (Kinsyn)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.KINSYN_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.KINSYN_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - id: priority
+        name: Listener rule priority
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+        run: echo "value=$((10000 + PR_NUMBER))" >> "$GITHUB_OUTPUT"
+
+      - name: terraform destroy
+        uses: dflook/terraform-destroy@v2
+        with:
+          path: terraform/preview
+          backend_config: key=infrastructure-dev/preview/${{ env.SERVICE_NAME }}.tfstate
+          variables: |
+            service_name="${{ env.SERVICE_NAME }}"
+            listener_rule_priority=${{ steps.priority.outputs.value }}

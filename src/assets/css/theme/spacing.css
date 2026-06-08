@@ -1,0 +1,6 @@
+@theme {
+  --spacing: 0.0625rem;
+
+  --spacing-header-height: 64px;
+  --spacing-header-height-lg: 112px;
+}

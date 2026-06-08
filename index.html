@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+
+    <title>KINSYN</title>
+
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="icon" href="/favicons/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicons/favicon-96x96.png" type="image/png" sizes="96x96" />
+    <link
+      rel="apple-touch-icon"
+      href="/favicons/apple-touch-icon.png"
+      type="image/png"
+      sizes="180x180"
+    />
+    <link rel="manifest" href="/manifest.webmanifest" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+    <script src="https://js.chargebee.com/v2/chargebee.js"></script>
+    <script>
+      (function () {
+        var s = document.createElement('script');
+        var h = document.querySelector('head') || document.body;
+        s.src = 'https://acsbapp.com/apps/app/dist/js/app.js';
+        s.async = true;
+        s.onload = function () {
+          acsbJS.init();
+        };
+        h.appendChild(s);
+      })();
+    </script>
+  </body>
+</html>

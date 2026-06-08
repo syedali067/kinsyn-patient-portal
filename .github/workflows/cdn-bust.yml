@@ -1,0 +1,55 @@
+name: CDN Cache Bust
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'The environment to bust the CDN for'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - replica
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  UAT_DISTRIBUTION_ID: ${{ vars.KINSYN_UAT_CLOUDFRONT_DISTRIBUTION_ID }}
+  PROD_DISTRIBUTION_ID: ${{ vars.KINSYN_PROD_CLOUDFRONT_DISTRIBUTION_ID }}
+
+jobs:
+  cache-clear-replica:
+    name: Bust CloudFront Cache
+    if: inputs.environment == 'replica'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials (Kinsyn)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.KINSYN_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.KINSYN_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Invalidate CloudFront /portal/*
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ env.UAT_DISTRIBUTION_ID }}" \
+            --paths "/portal" "/portal/*"
+
+  cache-clear-production:
+    name: Bust CloudFront Cache
+    if: inputs.environment == 'production'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials (Kinsyn)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.KINSYN_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.KINSYN_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Invalidate CloudFront /portal/*
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ env.PROD_DISTRIBUTION_ID }}" \
+            --paths "/portal" "/portal/*"
