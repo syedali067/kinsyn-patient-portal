@@ -29,6 +29,13 @@ export default defineConfig(({ command, mode }) => {
       vueDevTools(),
       tailwindcss(),
       svgLoader({ svgo: false }),
+      env.SENTRY_AUTH_TOKEN && env.SENTRY_ORG && env.SENTRY_PROJECT
+        ? sentryVitePlugin({
+            authToken: env.SENTRY_AUTH_TOKEN,
+            org: env.SENTRY_ORG,
+            project: env.SENTRY_PROJECT,
+          })
+        : null,
       sentryVitePlugin({
         authToken: env.SENTRY_AUTH_TOKEN,
         org: env.SENTRY_ORG,
