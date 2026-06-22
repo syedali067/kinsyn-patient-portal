@@ -15,7 +15,8 @@ export default defineConfig(({ command, mode }) => {
   return {
     base: basePath,
     build: {
-      sourcemap: true,
+      sourcemap: false,
+      outDir: 'dist',
     },
     plugins: [
       vue({
