@@ -1,16 +1,12 @@
 {
-  "routes": [
+  "rewrites": [
     {
-      "src": "^/portal$",
-      "dest": "/portal/index.html"
+      "source": "/portal/:path*",
+      "destination": "/index.html"
     },
     {
-      "src": "^/portal/(.*)$",
-      "dest": "/portal/index.html"
-    },
-    {
-      "src": "^/$",
-      "dest": "/portal/index.html"
+      "source": "/",
+      "destination": "/index.html"
     }
   ]
 }
